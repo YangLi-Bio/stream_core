@@ -642,3 +642,192 @@ hybrid_biclust <- function(seeds = seeds, rna.list = rna.list, atac.list = atac.
 
   return(HBCs)
 }
+
+
+# Merge significantly overlapped HBCs
+#' @import dplyr pbmcapply data.table
+merge_HBCs <- function(HBCs, stat = T, phyper.cutoff = 0.05,
+                       rna.dis, atac.dis) {
+
+  # Libraries
+  library(dplyr)
+  librry(pbmcapply)
+  library(data.table)
+
+
+  if (length(HBCs) < 2) {
+    return(HBCs)
+  }
+  HBCs <- HBCs[HBCs %>% sapply(., "[[", ("genes")) %>% sapply(., length) > 2]
+  HBCs <- HBCs[HBCs %>% sapply(., "[[", ("cells")) %>% sapply(., length) > 2]
+  sorted.HBCs <- HBCs[order(HBCs %>% sapply(., "[[", ("score")), decreasing = T)]
+  HBC.TFs <- unique(sapply(sorted.HBCs, "[[", "TF"))
+  new.HBCs <- do.call("c", pbmclapply(HBC.TFs, function(tf) {
+    TF.HBCs <- sorted.HBCs[sapply(sorted.HBCs, "[[", "TF") == tf]
+    if (length(TF.HBCs) < 2) {
+      return(TF.HBCs)
+    }
+    if (stat) {
+      TF.cells <- Reduce(union, unlist(sapply(TF.HBCs, "[[", "cells")))
+      N <- length(TF.cells)
+      comb.pairs <- combn(seq_along(TF.HBCs), 2)
+      adj.p.cutoff <- phyper.cutoff * length(TF.HBCs) * length(TF.HBCs)
+      tri.df <- rbindlist(lapply(1:ncol(comb.pairs), function(j) {
+        l1 <- comb.pairs[1, j]
+        l2 <- comb.pairs[2, j]
+        h1 <- TF.HBCs[[l1]]$cells
+        h2 <- TF.HBCs[[l2]]$cells
+        m <- length(h1)
+        k <- length(h2)
+        q <- length(intersect(h1, h2))
+        weight <- phyper(q - 1, m, N - m, k, lower.tail = F)
+        return(list(node1 = l1, node2 = l2, weight = weight))
+      }), fill = T) %>% dplyr::filter(weight <= adj.p.cutoff) %>%
+        dplyr::select(node1, node2) # build an igraph object
+      if (nrow(tri.df) < 1) { # no need to merge
+        return(TF.HBCs)
+      }
+      TF.cliques <- max_cliques(graph_from_data_frame(d = tri.df, directed = F)) # find maximal cliques
+      merged.TF.HBCs <- lapply(TF.cliques, function(k) {
+        HBC.list <- as.numeric(as_ids(k)) # the terminals to obtain the merged HBC
+        clique.HBCs <- TF.HBCs[HBC.list] # the HBCs belonging to this clique
+        terminal <- as.vector(sapply(clique.HBCs, "[[", "terminal"))
+        genes <- unique(unlist(lapply(clique.HBCs, "[[", "genes")))
+        peaks <- unique(unlist(lapply(clique.HBCs, "[[", "peaks")))
+        cells <- unique(unlist(lapply(clique.HBCs, "[[", "cells")))
+        atac.ratio <- mean(apply(atac.dis[peaks, cells], 1, sum)) / length(cells)
+        new.HBC <- list(terminal = terminal, TF = tf, genes = genes, peaks = peaks,
+                        cells = cells, atac.ratio = atac.ratio, score = 0)
+        new.HBC$score <- score_HBC(new.HBC, KL = 6)
+
+
+        new.HBC
+      })
+      ifelse(length(TF.cliques) < 2, covered.HBCs <- as.numeric(as_ids(TF.cliques[[1]])),
+             covered.HBCs <- unique(unlist(sapply(TF.cliques, function(y) {
+               as.numeric(as_ids(y))
+             })))) # the set of merged HBCs
+      isolated.TF.HBCs <- TF.HBCs[setdiff(seq_along(TF.HBCs), covered.HBCs)] # the isolated HBC
+      return(c(merged.TF.HBCs, isolated.TF.HBCs)) # merge the new HBCs
+    }
+  }, mc.cores = detectCores()))
+
+
+  return(new.HBCs[order(sapply(new.HBCs, "[[", "score"), decreasing = T)])
+}
+
+
+# Patch each HBC to add more genes and peaks
+#' @import Seurat pbmcapply dplyr Signac
+patch_HBCs <- function(merged.HBCs, binding.CREs, x, peak.ratio = NULL,
+                       peak.assay = "ATAC", distance = 500000) {
+
+  # Libraries
+  library(Seurat)
+  library(pbmcapply)
+  library(dplyr)
+  library(Signac)
+
+
+  rna.m <- binarize(GetAssayData(x, slot = "data", assay = "RNA"))
+  gene.coords <- CollapseToLongestTranscript(ranges = Annotation(object = x[[peak.assay]]))
+  atac.m <- binarize(GetAssayData(x, slot = "data", assay = peak.assay))
+  patched.HBCs <- pbmclapply(seq_along(merged.HBCs), function(i) {
+    HBC <- merged.HBCs[[i]]
+    HBC.rna <- rna.m[setdiff(rownames(rna.m), HBC$genes), HBC$cells, drop = F]
+    genes.keep <- names(which(rowSums(HBC.rna) == ncol(HBC.rna))) %>%
+      intersect(gene.coords$gene_name) # genes to keep
+    if (length(genes.keep) < 1) { # No gene has coordinate annotation
+      add.HBC <- HBC
+    } else if (!is.finite(distance)) { # Without constraints of peaks
+      HBC.seqs <- unique(seqnames(gene.coords[gene.coords$gene_name %in% HBC$genes])) # chromosomes of included genes
+      genes.keep.coords <- gene.coords[gene.coords$gene_name %in% genes.keep] # coordinates of genes to add
+      add.HBC <- HBC
+      add.HBC$genes <- c(add.HBC$genes, genes.keep.coords[seqnames(genes.keep.coords) %in% HBC.seqs]$gene_name)
+      add.HBC$score <- score_HBC(HBC = add.HBC, KL = 6)
+    } else {
+      HBC.gene.coords <- gene.coords[which(gene.coords$gene_name %in% genes.keep)] # coordinates to keep
+      peak.HBC.distance <- DistanceToTSS(peaks = StringToGRanges(HBC$peaks), genes = HBC.gene.coords,
+                                         distance = distance) # get the distance between genes and included peaks
+      add.genes <- c(names(which(colSums(peak.HBC.distance) > 0))) # directly add the genes
+      if (length(add.genes) < 1) {
+        add.HBC <- HBC
+      } else {
+        HBC.gene.coords <- HBC.gene.coords[HBC.gene.coords$gene_name %!in% add.genes]
+        HBC.atac <- atac.m[setdiff(binding.CREs[[HBC$TF]], HBC$peaks), HBC$cells, drop = F]
+        peak.ratio <- quantile(rowSums(atac.m[HBC$peaks, HBC$cells,
+                                              drop = F]))[[3]] / ncol(HBC.atac) # 25% quantile
+        peaks.keep <- names(which(rowSums(HBC.atac) >= peak.ratio * ncol(HBC.atac))) # peaks to keep
+        if (length(peaks.keep) < 1) { # Only add the genes linked to the peaks incorporated in the HBC
+          add.HBC <- HBC
+          add.HBC$genes <- c(add.HBC$genes, add.genes)
+          add.HBC$score <- score_HBC(HBC = add.HBC, KL = 6)
+        } else { # Have qualified peaks
+          peaks.keep.GR <- StringToGRanges(peaks.keep) # get GRange objects
+          peak_distance_matrix <- DistanceToTSS(peaks = peaks.keep.GR, genes = HBC.gene.coords,
+                                                distance = distance) # get the distance between peaks and genes
+          if (sum(peak_distance_matrix) == 0) {
+            add.HBC <- HBC
+            add.HBC$genes <- c(add.HBC$genes, add.genes)
+            add.HBC$score <- score_HBC(HBC = add.HBC, KL = 6)
+          } else {
+            colnames(peak_distance_matrix) <- HBC.gene.coords$gene_name # rename the columns
+            row.col <- get_coherent_peak_gene_pairs(peak_distance_matrix = peak_distance_matrix,
+                                                    HBC.rna = HBC.rna, HBC.atac = HBC.atac)
+            add.HBC <- HBC
+            add.HBC$genes <- c(HBC$genes, names(row.col)) # update the genes
+            add.HBC$peaks <- union(HBC$peaks, row.col) # update the peaks
+            add.HBC$score <- score_HBC(HBC = add.HBC, KL = 6)
+          }
+        }
+      }
+    }
+    add.gene.cells <- names(which(colSums(rna.m[HBC$genes,
+                                                setdiff(colnames(rna.m),
+                                                        HBC$cells),
+                                                drop = F]) >= length(HBC$genes)))
+    if (is.finite(distance)) {
+      peak.ratio <- quantile(colSums(atac.m[HBC$peaks, HBC$cells,
+                                            drop = F]))[[3]] / length(HBC$peaks)
+    } else {
+      peak.ratio <- quantile(colSums(atac.m[HBC$peaks, HBC$cells,
+                                            drop = F]))[[4]] / length(HBC$peaks)
+    }
+    peak.cell.cutoff <- peak.ratio * length(HBC$peaks)
+    add.peak.cells <- names(which(colSums(atac.m[HBC$peaks, add.gene.cells,
+                                                 drop = F]) >= peak.cell.cutoff))
+    add.HBC$cells <- c(add.HBC$cells, add.peak.cells)
+    add.HBC$score <- score_HBC(add.HBC, KL = 6) # score the HBC
+
+
+    return(add.HBC)
+  }, mc.cores = min(detectCores(), length(merged.HBCs)))
+
+
+  return(patched.HBCs[!sapply(patched.HBCs, is.null)])
+}
+
+
+# Calculate pairwise similarity between HBCs
+#' @import Matrix
+compute_sim <- function(HBCs) {
+
+  # Libraries
+  library(Matrix)
+
+
+  message ("Calculating the pairwise similarity between HBCs ...\n")
+  gene.sim.df <- compute_original_sim(HBCs = HBCs) # compute the original similarity overlaps on expression level
+  peak.sim.df <- compute_original_sim(HBCs = HBCs, features = "peaks")
+  norm.gene.df <- normalize_sim(sim.df = gene.sim.df, HBCs = HBCs) # normalize the similarity matrix
+  norm.peak.df <- normalize_sim(sim.df = peak.sim.df, HBCs = HBCs) # normalize the similarity matrix
+  norm.sim.df <- norm.gene.df
+  norm.sim.df$Sim <- sapply(1:nrow(norm.gene.df), function(i) {
+    min(norm.gene.df$Sim[i], norm.peak.df$Sim[i])
+  })
+  sim.m <- sparseMatrix(i = norm.sim.df$HBC1, j = norm.sim.df$HBC2,
+                        x = norm.sim.df$Sim) # generate a similarity matrix
+
+
+  sim.m
+}

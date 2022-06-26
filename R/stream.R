@@ -1,3 +1,7 @@
+# To-do list:
+# 1. Change the intermediate outputs into text or csv files
+
+
 # Script directory
 code.dir <- "/fs/ess/PCON0022/liyang/STREAM/Codes/stream/R/"
 
@@ -17,7 +21,7 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                        seed.ratio = 0.30, civero.covar = 0.00,
                        signac.score = 0.00, min.eGRNs = 100,
                        peak.assay = "ATAC", sim.mode = "both",
-                       cover.blocks = 10, KL = 6) {
+                       cover.blocks = 10, KL = 6, patch.dist = Inf) {
   set.seed(1234)
 
 
@@ -44,13 +48,14 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
   message ("Computing the GC content, CRE lengths, and dinucleotide base frequencies ...\n")
   obj <- RegionStats(object = obj, assay = peak.assay,
                      genome = org.gs)
+  qs::qsave(obj, paste0(out.dir, "Obj_total.qsave"))
   links.df <- filter_nearby_genes(obj = obj, peak.assay = peak.assay)
   # message ("Retained ", nrow(links.df), " CRE-gene pairs which are close to each other.\n")
 
   obj <- subset(x = obj, features = c(unique(links.df$peak),
                                       unique(links.df$gene)))
   qs::qsave(obj, paste0(out.dir, "Obj_after_filter_nearby_genes.qsave"))
-  qs::qsave(links.df, paste0(out.dir, "Nerby_CREs_genes.qsave"))
+  qs::qsave(links.df, paste0(out.dir, "Nearby_CREs_genes.qsave"))
 
 
   # Find highly variable genes and top-ranked CREs
@@ -169,4 +174,52 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                          binding.CREs = binding.CREs, G.list = G.list, TFGene.pairs = TFGene.pairs,
                          c.cutoff = c.cutoff, KL = KL, org.gs = org.gs,
                          rna.dis = rna.dis, atac.dis = atac.dis, min.cells = min.cells)
+  message ("Identified ", length(HBCs), " hybrid biclusters (HBCs).\n")
+  qs::qsave(HBCs, paste0(out.dir, "HBCs.qsave"))
+
+
+  # Merge significantly overlapped HBCs
+  merged.HBCs <- merge_HBCs(HBCs = HBCs, rna.dis = rna.dis, atac.dis = atac.dis)
+  message (length(merged.HBCs), " HBCs are discovered after fine-tuning.\n")
+  qs::qsave(merged.HBCs, paste0(out.dir, "HBCs_refined.qsave"))
+
+
+  # Free some memory
+  rm(TFGene.pairs)
+  rm(atac.list)
+  rm(atac.dis)
+  rm(HBCs)
+  rm(bound.TFs)
+
+
+  # Optimize the HBCs before submodular optimization
+  pbj <- qs::qread(paste0(out.dir, "Obj_total.qsave"))
+  patched.HBCs <- patch_HBCs(merged.HBCs = merged.HBCs, binding.CREs = binding.CREs,
+                             x = obj, peak.assay = peak.assay,
+                             distance = patch.dist)
+  qs::qsave(patched.HBCs, paste0(out.dir, "HBCs_optimized.qsave"))
+
+
+  # Submodular optimization
+  if (length(patched.HBCs) <= min.eGRNs) {
+    submod.HBCs <- patched.HBCs
+  } else {
+    message("Performing submodular optimization ...\n")
+    # To-do : here!!!!!!
+    sim.m <- compute_sim(HBCs = patched.HBCs) # calculate the pairwise similarity between HBCs
+    submod.obj <- sub_mod(HBCs = patched.HBCs, sim.m = sim.m, rna.list = rna.list,
+                            G.list = G.list,
+                            block.list = block.list, n.cells = ncol(rna.dis), pbmc = pbmc,
+                            peak.assay = peak.assay, distance = distance) # submodular optimization
+    rm(sim.m)
+    submod.HBCs <- submod.obj$regulons
+    qs::qsave(submod.obj$obj, paste0(out.dir, "Submodular_scores.qsave"))
+  }
+  message ("Submodular optimization identified ", length(submod.HBCs),
+           " enhancer gene regulatory networks (eGRNs).\n")
+  qs::qsave(submod.HBCs, paste0(out.dir, "HBCs_submod.qsave"))
+
+
+  # Extension of eGRNs
+  patch_HBCs()
 }

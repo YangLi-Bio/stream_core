@@ -161,3 +161,29 @@ link_signac <- function(x, distance = 500000,
 
   signac.links
 }
+
+
+# Get the most coherent peak-gene pairs
+#' @import data.table
+get_coherent_peak_gene_pairs <- function(peak_distance_matrix,
+                                         HBC.rna, HBC.atac) {
+
+  # Libraries
+  library(data.table)
+
+
+  row.col <- which(peak_distance_matrix > 0, arr.ind = T) # get the nonzero elements
+  peak.gene <- rbindlist(apply(row.col, 1, function(rr) {
+    return(list(rownames(peak_distance_matrix)[rr[1]], colnames(peak_distance_matrix)[rr[2]]))
+  })) # convert row and column ids into peaks and rows
+  colnames(peak.gene) <- c("peak", "gene")
+  peak.gene.weight <- cbind(peak.gene, weight = apply(peak.gene, 1, function(rr) {
+    return(length(which(HBC.atac[rr[1], ] > 0 & HBC.rna[rr[2], ] > 0)))
+  }))
+  peak.gene.weight <- peak.gene.weight[with(peak.gene.weight, order(gene, -weight))] # sort the data frame
+
+
+  return(tapply(peak.gene.weight$peak, peak.gene.weight$gene, function(i) {
+    head(i, n = 1) # select the pairs of peaks and genes
+  }))
+}
