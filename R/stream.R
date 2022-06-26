@@ -148,4 +148,25 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                        bound.TFs = bound.TFs, binding.CREs = binding.CREs,
                        TFGene.pairs = TFGene.pairs,
                        rna.dis = rna.dis, atac.dis = atac.dis, KL = KL)
+  if (length(seeds) < 1) {
+    stop ("No seeds is identified!\n")
+  }
+  mesage (length(seeds), " seeds are identified for hybrid biclustering.\n")
+  qs::qsave(seeds, paste0(out.dir, "Seeds.qsave"))
+
+
+  # Get the list of RNA and ATAC matrices
+  rna.list <- get_matrix_list(m = rna.dis, obj.list = obj.list, assay = "RNA") # RNA matrix
+  atac.list <- get_matrix_list(m = atac.dis, obj.list = obj.list, assay = peak.assay) # ATAC matrix
+  rm(obj.list)
+  qs::qsave(rna.list, paste0(out.dir, "RNA_matrix_list.qsave"))
+  qs::qsave(atac.list, paste0(out.dir, "ATAC_matrix_list.qsave"))
+
+
+  # Hybrid biclustering
+  HBCs <- hybrid_biclust(seeds = seeds, rna.list = rna.list, atac.list = atac.list,
+                         top.ngenes = top.ngenes, bound.TFs = bound.TFs,
+                         binding.CREs = binding.CREs, G.list = G.list, TFGene.pairs = TFGene.pairs,
+                         c.cutoff = c.cutoff, KL = KL, org.gs = org.gs,
+                         rna.dis = rna.dis, atac.dis = atac.dis, min.cells = min.cells)
 }
