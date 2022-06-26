@@ -740,7 +740,7 @@ patch_HBCs <- function(merged.HBCs, binding.CREs, x, peak.ratio = NULL,
     if (length(genes.keep) < 1) { # No gene has coordinate annotation
       add.HBC <- HBC
     } else if (!is.finite(distance)) { # Without constraints of peaks
-      HBC.seqs <- unique(seqnames(gene.coords[gene.coords$gene_name %in% HBC$genes])) # chromosomes of included genes
+      HBC.seqs <- unique(seqnames(gene.coords[gene.coords$gene_name %in% HBC$genes]))
       genes.keep.coords <- gene.coords[gene.coords$gene_name %in% genes.keep] # coordinates of genes to add
       add.HBC <- HBC
       add.HBC$genes <- c(add.HBC$genes, genes.keep.coords[seqnames(genes.keep.coords) %in% HBC.seqs]$gene_name)
@@ -808,6 +808,60 @@ patch_HBCs <- function(merged.HBCs, binding.CREs, x, peak.ratio = NULL,
 }
 
 
+# Calculate the pairwise similarity between eGRNs
+#' @import pbmcapply dplyr
+compute_original_sim <- function(HBCs, features = "genes") {
+
+  # Libraries
+  library(pbmcapply)
+  library(dplyr)
+
+
+  return(Reduce(rbind, pbmclapply(seq_along(HBCs), function(i) {
+    sq1 <- length(HBCs[[i]][[features]]) * length(HBCs[[i]]$cells)
+
+    sq1.sim <- lapply(seq_along(HBCs), function(j) {
+      if(i < j) {
+        return(NA)
+      } else if (i == j) {
+        return(list(HBC1 = i, HBC2 = i, Sim = 1, Same.TF = T))
+      }
+
+      sq2 <- length(HBCs[[j]][[features]]) * length(HBCs[[j]]$cells)
+      sq <- length(intersect(HBCs[[i]][[features]], HBCs[[j]][[features]])) *
+        length(intersect(HBCs[[i]]$cells, HBCs[[j]]$cells))
+      sim <- sq / min(sq1, sq2) # original similarity
+
+      ifelse(HBCs[[i]]$TF == HBCs[[j]]$TF & HBCs[[i]]$TF != 'NA',
+             return(list(HBC1 = i, HBC2 = j, Sim = sim,
+                         Same.TF = T)),
+             return(list(HBC1 = i, HBC2 = j, Sim = sim,
+                         Same.TF = F)))
+    })
+
+    return(rbindlist(sq1.sim[!is.na(sq1.sim)], fill = T))
+  }, mc.cores = min(detectCores(), length(HBCs)))) %>%
+    dplyr::filter(HBC1 != HBC2))
+}
+
+
+# Normalize the pairwise similarity
+normalize_sim <- function(sim.df, HBCs) {
+
+  same.df <- sim.df[sim.df$Same.TF, ] # pairs regulated by the same TF
+  diff.df <- sim.df[!sim.df$Same.TF, ] # pairs regulated by different TFs
+  norm.same.df <- same.df
+  norm.same.df$Sim <- (norm.same.df$Sim - mean(norm.same.df$Sim)) / sd(norm.same.df$Sim)
+  norm.diff.df <- diff.df
+  norm.diff.df$Sim <- (norm.diff.df$Sim - mean(norm.diff.df$Sim)) / sd(norm.diff.df$Sim)
+  return(rbind(norm.same.df, norm.diff.df, data.frame(HBC1 = seq_along(HBCs),
+                                                      HBC2 = seq_along(HBCs),
+                                                      Sim = rep(1, length(HBCs)),
+                                                      Same.TF = rep(T, length(HBCs)))))
+
+}
+
+
 # Calculate pairwise similarity between HBCs
 #' @import Matrix
 compute_sim <- function(HBCs) {
@@ -830,4 +884,148 @@ compute_sim <- function(HBCs) {
 
 
   sim.m
+}
+
+
+# Calculate the submodular optimization value after adding a HBC
+compute_add <- function(query, hit, sim.m, HBC.max.sim) {
+
+  return(unlist(sapply(query, function(i) {
+    add.sim <- max(sim.m[i, tail(hit, n = 1)],
+                   sim.m[tail(hit, n = 1), i])
+    ifelse (HBC.max.sim[[i]] < add.sim, return(add.sim),
+            return(HBC.max.sim[[i]]))
+  })))
+}
+
+
+# Select the next HBC
+#' @import pbmcapply
+select_HBC <- function(HBCs, sim.m, HBC.flag, HBC.max.sim,
+                       regulon.ids) {
+
+  # Libraries
+  library(pbmcapply)
+
+
+  max.sim.ll <- pbmclapply(seq_along(HBCs), function(x) {
+    if (!HBC.flag[x]) {
+      return(-1)
+    } # do not consider the HBCs that have been already selected
+    return(compute_add(query = seq_along(HBCs), hit = c(regulon.ids, x),
+                       sim.m = sim.m,
+                       HBC.max.sim = HBC.max.sim))
+    # compute the objective value
+  }, mc.cores = detectCores())
+  which.HBC <- which.max(unlist(sapply(max.sim.ll, sum)))
+
+
+  return(list(which.HBC, max.sim.ll[[which.HBC]]))
+}
+
+
+# Calculate the optimization function value
+#' @import pbmcapply
+calculate_sil <- function(selected.HBCs, links.df) {
+
+  # Libraries
+  library(pbmcapply)
+
+
+  use.genes <- Reduce(union, lapply(selected.HBCs, "[[", "genes")) # all genes included in all regulons
+  use.peaks <- Reduce(union, lapply(selected.HBCs, "[[", "peaks")) # all peaks included in all regulons
+  use.links <- links.df[links.df$gene %in% use.genes &
+                          links.df$peak %in% use.peaks, , drop = F] # useful links
+  inner.links <- sum(unlist(pbmclapply(1:nrow(use.links), function(i) {
+    whether.include <- F
+    for (j in seq_along(selected.HBCs)) {
+      if (use.links[i, 1] %in% selected.HBCs[[j]]$peaks &
+          use.links[i, 2] %in% selected.HBCs[[j]]$genes) {
+        whether.include <- T # include
+        break
+      }
+    }
+    return(whether.include)
+  }, mc.cores = detectCores())))
+  outer.links <- nrow(use.links) - inner.links # links not included
+  sil.score <- inner.links - outer.links # Silhouette score
+  message ("eGRN Silhouette score: ", sil.score, "\n.")
+
+
+  return(sil.score) # silhouette score
+}
+
+
+# Perform submodular optimization
+sub_mod <- function(HBCs, sim.m, G.list, n.cells, rna.list, block.list,
+                    obj, peak.assay = "ATAC",
+                    min.eGRNs = 100, submod.mode = 1,
+                    distance = 500000) {
+
+  regulon.ids <- c() # the list of HBC ids
+  obj.list <- c() # the list of objective values
+  HBC.flag <- rep(T, length(HBCs))
+  HBC.max.sim <- rep(-1, length(HBCs))
+  max.n <- 0 # the number of HBCs to select which yields the maximum objective value
+  max.obj <- -2 # the current maximum objective value
+  links.df <- filter_nearby_genes(obj, distance = distance,
+                                  peak.assay = peak.assay)
+  while (1) {
+    double.output <- select_HBC(HBCs = HBCs, sim.m = sim.m,
+                                HBC.flag = HBC.flag,
+                                HBC.max.sim = HBC.max.sim,
+                                regulon.ids = regulon.ids) # select the next HBC
+    add.id <- double.output[[1]]
+    HBC.max.sim <- double.output[[2]]
+    regulon.ids <- c(regulon.ids, add.id) # add the new HBC
+    message ("Finished evaluating the ", length(regulon.ids), " HBCs.\n")
+    HBC.flag[add.id] <- F # mask this selected HBC
+    obj.list <- c(obj.list, calculate_sil(selected.HBCs = HBCs[regulon.ids],
+                                          links.df = links.df))
+    if (length(regulon.ids) >= length(HBCs)) {
+      break
+    }
+  }
+
+  max.n <- tail(which(obj.list == max(obj.list[(min.eGRNs + 1) : length(HBCs)])), n = 1)
+  message (max.n, " regulons yield the maximum score.\n")
+  regulons <- HBCs[regulon.ids[1:max.n]] # select regulons
+
+
+  return(list(regulons = regulons, obj = obj.list))
+}
+
+
+# Add putative genes to an eGRN if required
+#' @import Seurat Signac pbapply
+expand_eGRNs <- function(obj, submod.HBCs, peak.assay = 'ATAC',
+                         distance = Inf) {
+
+  # Libraries
+  library(Seurat)
+  library(Signac)
+  librarY(pbapply)
+
+
+  # Expansion
+  rna.m <- GetAssayData(object = obj, slot = "data", assay = "RNA") > 0 # get the RNA expression matrix
+  atac.m <- GetAssayData(object = obj, slot = "data", assay = peak.assay) > 0
+  gene.coords <- CollapseToLongestTranscript(ranges = Annotation(object = obj[[peak.assay]])) # coordinates
+  distance.df <- DistanceToTSS(peaks = StringToGRanges(rownames(atac.m)),
+                               genes = gene.coords,
+                               distance = distance) # distance matrix
+  expanded.eGRNs <- pblapply(submod.HBCs, function(x) {
+    add.genes <- setdiff(names(which(apply(rna.m[, x$cells], 1, sum) >=
+                                       length(x$cells) * expand.cutoff)),
+                         x$genes) # select additional genes
+    add.coords <- gene.coords[gene.coords$gene_name %in% add.genes] # subset the genes to add
+    overlap.genes <- intersect(add.genes, colnames(distance.df)) # some genes have not coordinates
+    add.dist <- summary(distance.df[, overlap.genes]) # get the distance matrix
+    x$gene.status <- c(rep(T, length(x$genes)), rep(F, length(add.genes))) # record the status of genes
+    x$genes <- c(x$genes, add.genes) # extend genes
+    x
+  })
+
+
+  expanded.eGRNs
 }

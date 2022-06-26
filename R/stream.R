@@ -21,7 +21,7 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                        seed.ratio = 0.30, civero.covar = 0.00,
                        signac.score = 0.00, min.eGRNs = 100,
                        peak.assay = "ATAC", sim.mode = "both",
-                       cover.blocks = 10, KL = 6, patch.dist = Inf) {
+                       cover.blocks = 10, KL = 6, expand.dist = Inf) {
   set.seed(1234)
 
 
@@ -205,11 +205,10 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
     submod.HBCs <- patched.HBCs
   } else {
     message("Performing submodular optimization ...\n")
-    # To-do : here!!!!!!
     sim.m <- compute_sim(HBCs = patched.HBCs) # calculate the pairwise similarity between HBCs
     submod.obj <- sub_mod(HBCs = patched.HBCs, sim.m = sim.m, rna.list = rna.list,
                             G.list = G.list,
-                            block.list = block.list, n.cells = ncol(rna.dis), pbmc = pbmc,
+                            block.list = block.list, n.cells = ncol(rna.dis), obj = obj,
                             peak.assay = peak.assay, distance = distance) # submodular optimization
     rm(sim.m)
     submod.HBCs <- submod.obj$regulons
@@ -221,5 +220,10 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
 
 
   # Extension of eGRNs
-  patch_HBCs()
+  expanded.eGRNs <- expand_eGRNs(obj = obj, submod.HBCs = submod.HBCs, peak.assay = peak.assay,
+               distance = expand.dist)
+
+
+  # Return
+  expanded.eGRNs
 }
