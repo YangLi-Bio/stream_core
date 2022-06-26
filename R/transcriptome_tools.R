@@ -4,7 +4,6 @@ data.dir <- "/fs/ess/PCON0022/liyang/STREAM/Codes/stream/data/"
 
 
 # Source the R scripts
-source(paste0(code.dir, "transcriptome_tools.R"))
 
 
 # LTMG modeling

@@ -9,6 +9,9 @@ code.dir <- "/fs/ess/PCON0022/liyang/STREAM/Codes/stream/R/"
 # Source the R scripts
 source(paste0(code.dir, "cistrome_tools.R"))
 source(paste0(code.dir, "reguome_tools.R"))
+source(paste0(code.dir, "epigenome_tools.R"))
+source(paste0(code.dir, "multiome_tools.R"))
+source(paste0(code.dir, "transcriptome_tools.R"))
 source(paste0(code.dir, "utils.R"))
 
 
@@ -22,10 +25,17 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                        signac.score = 0.00, min.eGRNs = 100,
                        peak.assay = "ATAC", sim.mode = "both",
                        cover.blocks = 10, KL = 6, expand.dist = Inf) {
-  set.seed(1234)
+
+
+  # Check parameters
+  if (!dir.exists(out.dir)) {
+    message ("Creating the directory: ", out.dir, " ..\n")
+    dir.create(out.dir)
+  }
 
 
   # Libraries
+  set.seed(1234)
   library(IRISFGM)
   if (org == "mm10") {
     org.gs <- BSgenome.Mmusculus.UCSC.mm10
