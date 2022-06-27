@@ -412,7 +412,8 @@ expand_core <- function(HBC, top.genes.peaks, rna.m, atac.m, G,
 
 
       return(list(gene = g, peak = qual.peaks, cells = g.cells))
-    }, mc.cores = detectCores()) %>% discard(is.null)
+    }, mc.cores = detectCores())
+    choice.info <- choice.info[sapply(choice.info, is.not.null)]
     qual.info <- choice.info[!is.na(choice.info %>% lapply(., "[[", ("gene")) %>% unlist)]
     if (length(qual.info) < 1) {
       break
@@ -636,7 +637,7 @@ hybrid_biclust <- function(seeds = seeds, rna.list = rna.list, atac.list = atac.
 
   for (HBC in seeds) {
     idd <- idd + 1
-    message ("Processing the seed : ", idd, " ...\n")
+    message ("Processing the putative seed : ", idd, " ...\n")
     if (!exist_seed(s = HBC, HBCs = HBCs, same.terminal = same.terminal,
                     intra.cutoff = intra.cutoff,
                     inter.cutoff = inter.cutoff,
@@ -649,7 +650,7 @@ hybrid_biclust <- function(seeds = seeds, rna.list = rna.list, atac.list = atac.
     message("Processing the ", id, " hybrid bicluster ...\n")
     HBC <- expand_HBC(HBC = HBC, cand.peaks = binding.CREs[[HBC$TF]],
                       rna.m = rna.list[[HBC$terminal]], atac.m = atac.list[[HBC$terminal]],
-                      dual = dual, cand.genes = TFGene.pairs[[HBC$terminal]]$TF.genes[[HBC$TF]],
+                      cand.genes = TFGene.pairs[[HBC$terminal]]$TF.genes[[HBC$TF]],
                       G = G.list[[HBC$terminal]], m = rna.dis, mm = atac.dis,
                       top.ngenes = top.ngenes, c.cutoff = c.cutoff,
                       KL = KL, Q = Q, P = P, min.cells = min.cells)
