@@ -601,9 +601,11 @@ inter_eligible_seed <- function(s, h,
 # Hybrid biclustering
 #' @import igraph BSgenome.Hsapiens.UCSC.hg19 BSgenome.Hsapiens.UCSC.hg38 BSgenome.Mmusculus.UCSC.mm10 BSgenome.Mmusculus.UCSC.mm9 dplyr
 hybrid_biclust <- function(seeds = seeds, rna.list = rna.list, atac.list = atac.list,
-               top.ngenes = top.ngenes, bound.TFs = bound.TFs,
+               top.ngenes = top.ngenes, bound.TFs = bound.TFs, same.terminal = F,
                binding.CREs = binding.CREs, G.list = G.list, TFGene.pairs = TFGene.pairs,
                c.cutoff = c.cutoff, KL = KL, org.gs = org.gs,
+               intra.cutoff = 0.75, inter.cutoff = 0.50,
+               peak.cutoff = 0.50,
                rna.dis = rna.dis, atac.dis = atac.dis, min.cells = min.cells) {
 
   # Libraries
@@ -670,7 +672,7 @@ merge_HBCs <- function(HBCs, stat = T, phyper.cutoff = 0.05,
 
   # Libraries
   library(dplyr)
-  librry(pbmcapply)
+  library(pbmcapply)
   library(data.table)
 
 
@@ -968,7 +970,7 @@ calculate_sil <- function(selected.HBCs, links.df) {
   }, mc.cores = detectCores())))
   outer.links <- nrow(use.links) - inner.links # links not included
   sil.score <- inner.links - outer.links # Silhouette score
-  message ("eGRN Silhouette score: ", sil.score, "\n.")
+  message ("eGRN optimization score: ", sil.score, ".\n")
 
 
   return(sil.score) # silhouette score
@@ -1006,24 +1008,25 @@ sub_mod <- function(HBCs, sim.m, G.list, n.cells, rna.list, block.list,
     }
   }
 
-  max.n <- tail(which(obj.list == max(obj.list[(min.eGRNs + 1) : length(HBCs)])), n = 1)
-  message (max.n, " regulons yield the maximum score.\n")
-  regulons <- HBCs[regulon.ids[1:max.n]] # select regulons
+  max.n <- tail(which(obj.list == max(obj.list[(min.eGRNs + 1) :
+                                                 length(HBCs)])), n = 1)
+  message (max.n, " eGRNs yield the maximum score.\n")
+  eGRNs <- HBCs[regulon.ids[1 : max.n]] # select regulons
 
 
-  return(list(regulons = regulons, obj = obj.list))
+  return(list(eGRNs = eGRNs, obj = obj.list))
 }
 
 
 # Add putative genes to an eGRN if required
 #' @import Seurat Signac pbapply
 expand_eGRNs <- function(obj, submod.HBCs, peak.assay = 'ATAC',
-                         distance = Inf) {
+                         distance = 250000, expand.cutoff = 0.70) {
 
   # Libraries
   library(Seurat)
   library(Signac)
-  librarY(pbapply)
+  library(pbapply)
 
 
   # Expansion

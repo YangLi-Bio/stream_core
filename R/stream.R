@@ -30,8 +30,11 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                        signac.score = 0.00, min.eGRNs = 100,
                        peak.assay = "ATAC", sim.mode = "both",
                        distance = 500000, signac.pval = 1.0,
+                       intra.cutoff = 0.75, inter.cutoff = 0.50,
+                       peak.cutoff = 0.5, patch.dist = Inf,
                        cover.blocks = 10, KL = 6,
-                       expand.dist = Inf) {
+                       expand.dist = 250000,
+                       expand.cutoff = 0.70) {
 
 
   # Check parameters
@@ -206,8 +209,10 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
   # Hybrid biclustering
   HBCs <- hybrid_biclust(seeds = seeds, rna.list = rna.list, atac.list = atac.list,
                          top.ngenes = top.ngenes, bound.TFs = bound.TFs,
-                         binding.CREs = binding.CREs, G.list = G.list, TFGene.pairs = TFGene.pairs,
+                         binding.CREs = binding.CREs, G.list = G.list,
+                         TFGene.pairs = TFGene.pairs, peak.cutoff = peak.cutoff,
                          c.cutoff = c.cutoff, KL = KL, org.gs = org.gs,
+                         intra.cutoff = intra.cutoff, inter.cutoff = inter.cutoff,
                          rna.dis = rna.dis, atac.dis = atac.dis, min.cells = min.cells)
   message ("Identified ", length(HBCs), " hybrid biclusters (HBCs).\n")
   qs::qsave(HBCs, paste0(out.dir, "HBCs.qsave"))
@@ -242,11 +247,12 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
     message("Performing submodular optimization ...\n")
     sim.m <- compute_sim(HBCs = patched.HBCs) # calculate the pairwise similarity between HBCs
     submod.obj <- sub_mod(HBCs = patched.HBCs, sim.m = sim.m, rna.list = rna.list,
-                            G.list = G.list,
-                            block.list = block.list, n.cells = ncol(rna.dis), obj = obj,
-                            peak.assay = peak.assay, distance = distance) # submodular optimization
+                          G.list = G.list,
+                          block.list = block.list, n.cells = ncol(rna.dis),
+                          obj = obj, min.eGRNs = min.eGRNs,
+                          peak.assay = peak.assay, distance = distance) # submodular optimization
     rm(sim.m)
-    submod.HBCs <- submod.obj$regulons
+    submod.HBCs <- submod.obj$eGRNs
     qs::qsave(submod.obj$obj, paste0(out.dir, "Submodular_scores.qsave"))
   }
   message ("Submodular optimization identified ", length(submod.HBCs),
@@ -255,8 +261,10 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
 
 
   # Extension of eGRNs
-  expanded.eGRNs <- expand_eGRNs(obj = obj, submod.HBCs = submod.HBCs, peak.assay = peak.assay,
-               distance = expand.dist)
+  expanded.eGRNs <- expand_eGRNs(obj = obj, submod.HBCs = submod.HBCs,
+                                 peak.assay = peak.assay,
+                                 distance = expand.dist,
+                                 expand.cutoff = expand.cutoff)
 
 
   # Return
