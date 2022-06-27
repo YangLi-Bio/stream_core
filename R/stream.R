@@ -13,6 +13,7 @@ source(paste0(code.dir, "epigenome_tools.R"))
 source(paste0(code.dir, "multiome_tools.R"))
 source(paste0(code.dir, "transcriptome_tools.R"))
 source(paste0(code.dir, "utils.R"))
+source(paste0(code.dir, "TFBS_list.R"))
 
 
 # Run STREAM
@@ -84,7 +85,7 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
 
   # Annotate CREs with TF binding sites
   TF.CRE.pairs <- find_TFBS(GetAssayData(obj, assay = peak.assay, slot = "data"),
-                            org = org)
+                            TFBS.list = TFBS.list, org = org)
   bound.TFs <- TF.CRE.pairs$CRE
   binding.CREs <- TF.CRE.pairs$TF
   rm(TF.CRE.pairs)
@@ -93,24 +94,35 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
 
 
   # LTMG modeling
-  LTMG.matrix <- call_LTMG(obj = obj)
+  LTMG.obj <- call_LTMG(obj = obj)
+  LTMG.matrix <- GetLTMGmatrix(LTMG.obj)
+  LTMG.matrix <- LTMG.matrix - min(LTMG.matrix)
   qs::qsave(LTMG.matrix, paste0(out.dir, "LTMG_matrix.qsave"))
+  qs::qsave(LTMG.obj, paste0(out.dir, "LTMG_obj.qsave"))
+  message ("Finished LTMG modeling for ", nrow(LTMG.obj@LTMG@LTMG_discrete),
+           " genes across ", ncol(LTMG.obj@LTMG@LTMG_discrete), " cells.\n")
   # p.LTMG <- file.path(tempdir(), "LTMG_matrix.txt")
   # write_LTMG(as.data.frame(binarize(as(LTMG.matrix, "sparseMatrix"))), p.LTMG)
 
 
   # Biclustering on transcriptome data
+  # setwd(out.dir)
+  LTMG.obj <- CalBinaryMultiSignal(LTMG.obj)
+  # LTMG.obj@LTMG@LTMG_BinaryMultiSignal <- LTMG.obj@LTMG@LTMG_discrete -
+  #   min(LTMG.obj@LTMG@LTMG_discrete)
   block.original <- RunBicluster(
-    CreateIRISFGMObject(as.data.frame(binarize(as(LTMG.matrix, "sparseMatrix")))),
+    LTMG.obj,
     DiscretizationModel = "LTMG", OpenDual = F,
     NumBlockOutput = n.blocks, BlockOverlap = 0.25,
     BlockCellMin = min.cells, Extension = c.cutoff)
+  rm(LTMG.obj)
+  qs::qsave(block.original, paste0(out.dir, "QUBIC_block_obj.qsave"))
   message ("Identified ", length(unique(block.list[, 2, drop = F])),
            " QUBIC biclusters.\n")
-  block.list <- retain_blocks(block.original = block.original, sim.mode = sim.mode,
-                              cover.blocks = cover.blocks)
-  # run_QUBIC(path = qubic.path, file = ltmg.file, f = 0.25,
-  #   dual = dual.mode, k = min.cells, o = n.blocks)
+  block.list <- load_blocks(block.original = block.original,
+                            cover.blocks = cover.blocks, n.blocks = n.blocks,
+                            sim.mode = sim.mode, rank.blocks = T)
+  qs::qsave(block.list, paste0(out.dir, "QUBIC_blocks.qsave"))
 
 
   # Get the list of Seurat objects

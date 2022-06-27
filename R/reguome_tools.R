@@ -3,8 +3,8 @@ code.dir <- "/fs/ess/PCON0022/liyang/STREAM/Codes/stream/R/"
 data.dir <- "/fs/ess/PCON0022/liyang/STREAM/Codes/stream/data/"
 
 
-# Source the R scripts
-source(paste0(code.dir, "TFBS_list.R"))
+# # Source the R scripts
+# source(paste0(code.dir, "TFBS_list.R"))
 
 
 # Annotate CREs with TFs
@@ -37,7 +37,7 @@ find_TFBS <- function(m.atac, TFBS.list, org = "hg38") {
   TF.dfs <- split(x = TF.peak.df$peak, f = TF.peak.df$TF)
 
 
-  list(CRE = peak.dfs, TF = TF.peaks)
+  list(CRE = peak.dfs, TF = TF.dfs)
 }
 
 

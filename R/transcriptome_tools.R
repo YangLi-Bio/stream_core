@@ -17,13 +17,16 @@ call_LTMG <- function(obj) {
   ltmg.df <- as.data.frame(obj@assays$RNA@data) # get the expression matrix saved in a data frame
   ltmg.obj <- ProcessData(CreateIRISFGMObject(ltmg.df),
                           normalization = "cpm", IsImputation = F)
-  ltmg.matrix <- GetLTMGmatrix(RunLTMG(ltmg.obj, Gene_use = "all"))
-  ltmg.matrix <- ltmg.matrix - min(ltmg.matrix) # avoid the overflow of 1s
-  message ("Finished LTMG modeling for ", nrow(ltmg.matrix), " variable genes and ",
-           ncol(ltmg.matrix), " cells.\n")
+  # ltmg.matrix <- GetLTMGmatrix(RunLTMG(ltmg.obj, Gene_use = "all"))
+  # ltmg.matrix <- ltmg.matrix - min(ltmg.matrix) # avoid the overflow of 1s
+  # message ("Finished LTMG modeling for ", nrow(ltmg.matrix), " variable genes and ",
+  #          ncol(ltmg.matrix), " cells.\n")
+  #
+  #
+  # return(ltmg.matrix)
 
 
-  return(ltmg.matrix)
+  RunLTMG(ltmg.obj, Gene_use = "all")
 }
 
 
@@ -65,25 +68,25 @@ write_LTMG <- function(LTMG.matrix, p.LTMG) {
 
 # Select the next bicluster
 #' @import pbmcapply
-select_block <- function(block.original, retained.blocks, ucells = c(),
+select_block <- function(block.list, retained.blocks, ucells = c(),
                          ugenes = NULL, sim.mode = "both") {
 
   # Libraries
   library(pbmcapply)
 
-  add.size.ll <- pbmclapply(seq_along(block.original), function(i) {
+  add.size.ll <- pbmclapply(seq_along(block.list), function(i) {
     if (i %in% retained.blocks) {
       return(-1)
     }
 
     ifelse (sim.mode == "both",
-            add.size <- length(setdiff(block.original[[i]]$genes, ugenes)) *
-              length(setdiff(block.original[[i]]$cells, ucells)),
-            add.size <- length(setdiff(block.original[[i]]$cells, ucells)))
+            add.size <- length(setdiff(block.list[[i]]$genes, ugenes)) *
+              length(setdiff(block.list[[i]]$cells, ucells)),
+            add.size <- length(setdiff(block.list[[i]]$cells, ucells)))
     # compute the add size
 
     return(add.size)
-  }, mc.cores = min(detectCores(), length(block.original))) %>% unlist
+  }, mc.cores = min(detectCores(), length(block.list))) %>% unlist
 
   max.add.value <- max(add.size.ll)
   max.add.id <- which.max(add.size.ll)
@@ -97,7 +100,7 @@ select_block <- function(block.original, retained.blocks, ucells = c(),
 
 
 # Retain QUBIC blocks based on submodular optimization
-retain_blocks <- function(block.original, sim.mode = "both",
+retain_blocks <- function(block.list, sim.mode = "both",
               cover.blocks = 10) {
   i <- 0
   retained.blocks <- c() # selected blocks
@@ -109,7 +112,7 @@ retain_blocks <- function(block.original, sim.mode = "both",
   }
 
   while(i < cover.blocks) {
-    block.id <- select_block(block.original = block.original,
+    block.id <- select_block(block.list = block.list,
                              retained.blocks = retained.blocks,
                              ucells = ucells,
                              ugenes = ugenes,
@@ -122,12 +125,79 @@ retain_blocks <- function(block.original, sim.mode = "both",
 
     retained.blocks <- c(retained.blocks, block.id)
     i <- i + 1
-    ucells <- union(ucells, block.original[[block.id]]$cells)
+    ucells <- union(ucells, block.list[[block.id]]$cells)
 
     if (sim.mode == "both") {
-      ugenes <- union(ugenes, block.original[[block.id]]$genes)
+      ugenes <- union(ugenes, block.list[[block.id]]$genes)
     }
   }
 
   retained.blocks
+}
+
+
+# Get the list of QUBIC biclusters
+#' @import dplyr
+get_block_list <- function(block.genes, block.cells, ngene = 3,
+                           top.block = NULL, top.cells = NULL) {
+
+  # Libraries
+  library(dplyr)
+
+
+  if (is.null(top.block)) {
+    top.block <- length(unique(block.genes$Condition))
+  }
+  gene.ll <- split(x = block.genes, f = block.genes$Condition) %>%
+    lapply(., `[[`, ('Gene'))
+  cell.ll <- split(x = block.cells, f = block.cells$Condition) %>%
+    lapply(., `[[`, ('cell_name'))
+  flag.ll <- sapply(gene.ll, length) %>% `>=` (ngene) # check the eligibility of each block
+  list1 <- lapply(seq_along(gene.ll), function(i) {
+    return(list(genes = gene.ll[[i]], cells = cell.ll[[i]]))
+  })
+  list3 <- list1[1 : min(top.block, length(list1))]
+
+
+    if (is.null(top.cells)) {
+    return(list3)
+  }
+
+
+  ncells.ll <- sapply(cell.ll, length)
+  cell.order <- order(ncells.ll, decreasing = T)
+  gene.ll <- gene.ll[cell.order]
+  cell.ll <- cell.ll[cell.order]
+  list2 <- lapply(seq_along(gene.ll), function(i) {
+    return(list(genes = gene.ll[[i]], cells = cell.ll[[i]]))
+  })
+  list4 <- list2[1 : min(top.cells, length(list2))]
+
+
+  return(c(list3, list4))
+}
+
+
+# Load QUBIC biclusters
+load_blocks <- function(block.original,
+            cover.blocks = 10, n.blocks = 200,
+            sim.mode = "cell", rank.blocks = T) {
+
+  block.genes <- block.original@BiCluster@CoReg_gene
+  block.cells <- block.original@BiCluster@CoCond_cell
+  if (length(levels(block.genes$Condition)) !=
+      length(levels(block.cells$Condition))) {
+    stop ('The number of gene sets and cell sets in QUBIC 2.0 blocks are different: \n')
+  }
+  block.list <- get_block_list(block.genes = block.genes, block.cells = block.cells)
+  if (length(block.ll) < 1) {
+    stop ("There is no QUBIC bicluster identified!\n")
+  }
+
+  if (rank.blocks) {
+    return(block.list[retain_blocks(block.list = block.list, sim.mode = sim.mode,
+                                  cover.blocks = cover.blocks)])
+  } else {
+    return(block.list[1 : min(cover.blocks, length(block.list))])
+  }
 }
