@@ -41,8 +41,10 @@ link_cor <- function(x.atac, distance = 500000, cicero.covar = 0) {
 
 
   # Assign covariance as the matrix elements
-  hit_matrix[row.col[i, 1], row.col[i, 2]] <- cov(x.atac[row.col[i, 1], ],
-                                                  x.atac[row.col[i, 2], ])
+  for (i in 1 : nrow(row.col)) {
+    hit_matrix[row.col[i, 1], row.col[i, 2]] <- cov(x.atac[row.col[i, 1], ],
+                                                    x.atac[row.col[i, 2], ])
+  }
   hit_matrix[which(hit_matrix < cicero.covar)] <- 0 # discard the negative elements
   summ <- summary(hit_matrix) # convert the matrix into a sparse matrix
   cor.links <- data.frame(Origin = rownames(hit_matrix)[summ$i],

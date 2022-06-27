@@ -28,3 +28,16 @@ binarize <- function(x) {
 
   xx
 }
+
+
+# Suppress the messages
+quiet <- function(x) {
+  sink(tempfile())
+  on.exit(sink())
+  invisible(force(x))
+}
+
+
+# Reverse the boolean variables
+`%!in%` <- Negate(`%in%`) # define the negation of %in%
+is.not.null <- function(x) !is.null(x) # define a function

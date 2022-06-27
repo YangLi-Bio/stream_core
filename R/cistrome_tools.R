@@ -102,7 +102,7 @@ filter_nearby_genes <- function(obj, distance = 500000, peak.assay = "ATAC") {
 
 
 # Link CREs to genes
-#' @import Signac pbmcapply dplyr
+#' @import Signac pbmcapply dplyr Seurat
 link_signac <- function(x, distance = 500000,
                         signac.score = 0,
                         signac.pval = 1,
@@ -110,6 +110,7 @@ link_signac <- function(x, distance = 500000,
                         peak.assay = 'ATAC') {
 
   # Libraries
+  library(Seurat)
   library(Signac)
   library(pbmcapply)
   library(dplyr)
@@ -120,7 +121,7 @@ link_signac <- function(x, distance = 500000,
   x <- tryCatch(LinkPeaks(object = x, distance = distance,
                            min.cells = min.cells,
                            peak.assay = peak.assay, expression.assay = 'RNA',
-                           method = method, n_sample = n.sample, pvalue_cutoff = signac.pval,
+                           pvalue_cutoff = signac.pval,
                            score_cutoff = signac.score, verbose = T),
                 error = function(e) {
                   0 }) # build linkages
@@ -131,16 +132,17 @@ link_signac <- function(x, distance = 500000,
   } else {
     x <- xx
     signac.links <- filter_nearby_genes(obj = x) # link peaks to genes using heuristics
-    signac.links <- cbind(signac.links, pbmclapply(1:nrow(signac.links), function(i) {
+    signac.links <- cbind(signac.links, pbmclapply(1 : nrow(signac.links),
+                                                   function(i) {
       vx <- as.vector(x[["RNA"]][signac.links$gene[i]])
-      vy <- as.vector(x[[atac.assay]][signac.links$peak[i]])
+      vy <- as.vector(x[[peak.assay]][signac.links$peak[i]])
 
       if (sum(vx > 0) <= 0 | sum(vy > 0) <= 0) {
         return(0)
       } else if (sd(vx) == 0 | sd(vy) == 0) {
         return(1)
       } else {
-        return(cor(x = vx, y = vy, method = method))
+        return(cor(x = vx, y = vy, method = "pearson"))
       }
     }, mc.cores = min(detectCores(), nrow(signac.links))) %>% unlist)
     colnames(signac.links) <- c("node1", "node2", "weight")

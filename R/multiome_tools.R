@@ -9,7 +9,7 @@ VERY_SMALL <- 0.00001
 
 # Subset a Seurat object
 #' @import Seurat pbapply
-subset_object <- function(block.list, object, seed.ratio = 0, atac.assay = 'ATAC',
+subset_object <- function(block.list, object, seed.ratio = 0, peak.assay = 'ATAC',
                           atac.dis, max.peaks = 3000, links.df, min.cells = 0) {
 
   # Libraries
@@ -51,7 +51,7 @@ build_graph <- function(obj.list,
   # Libraries
   library(Signac)
   library(cicero)
-  library(org.gs, character.only = T)
+  # library(org.gs)
   library(pbapply)
   library(igraph)
 
@@ -63,14 +63,14 @@ build_graph <- function(obj.list,
                                 min.cells = min.cells,
                                 cell.weight = cell.weight,
                                 peak.assay = peak.assay)
-    if (is.null(signac.links)) {
+    if (is.null(signac.links) | nrow(signac.links) < 1) {
       return(NULL)
     }
 
 
     # Link CREs to CREs
     x.atac <- GetAssayData(object = x, slot = 'data',
-                           assay = atac.assay) # extract the ATAC assay
+                           assay = peak.assay) # extract the ATAC assay
     ifelse (nrow(x.atac) <= 1000 | ncol(x.atac) <= 1000,
             cicero.links <- link_cor(x.atac, distance = distance,
                                      cicero.covar = cicero.covar),
@@ -81,14 +81,16 @@ build_graph <- function(obj.list,
                                        message ('Error: something is wrong with Cicero.\n')
                                        0
                                      }))
-    if (is.null(cicero.links) | "data.frame" %!in% class(cicero.links)) { # error exists
+    if (is.null(cicero.links) | "data.frame" %!in%
+        class(cicero.links)) { # error exists
       cicero.links <- link_cor(x.atac, distance = distance,
                                cicero.covar = cicero.covar,
                                cell.weight = cell.weight)
     }
 
 
-    quiet(ifelse ("data.frame" %in% class(cicero.links), links <- rbind(signac.links, cicero.links),
+    quiet(ifelse ("data.frame" %in% class(cicero.links),
+                  links <- rbind(signac.links, cicero.links),
                   links <- signac.links)) # bind two data frames
     G <- graph_from_data_frame(links, directed = F) # build graph
     E(G)$weight <- links$weight # assign the edge weights
@@ -203,8 +205,21 @@ score_HBC <- function(HBC, m = NULL, KL = 6, Q = NULL,
 }
 
 
+# Rearrange the columns of a data frame
+rearrange_cols <- function(df) {
+
+  Reduce(rbind, lapply(1 : nrow(df), function(i) {
+    if (!grepl("^chr", df[i, 1])) {
+      return(list(df[i, 2:1]))
+    }
+
+    return(df[i, ])
+  }))
+}
+
+
 # Seeding based on Steiner forest problem (SFP) model
-#' @import igraph pbmcapply dplyr
+#' @import igraph pbmcapply dplyr scales
 SFP_seeding <- function(block.list, G.list, obj.list, bound.TFs, binding.CREs,
                            TFGene.pairs, rna.dis, atac.dis, KL = 6, P = NULL,
                            Q = NULL, score.cutoff = 1) {
@@ -213,6 +228,7 @@ SFP_seeding <- function(block.list, G.list, obj.list, bound.TFs, binding.CREs,
   library(igraph)
   library(pbmcapply)
   library(dplyr)
+  library(scales)
 
 
   seed.es <- Reduce(rbind, pbmclapply(seq_along(block.list), function(i) {
@@ -273,7 +289,8 @@ SFP_seeding <- function(block.list, G.list, obj.list, bound.TFs, binding.CREs,
 
       return(HBC)
     })
-  }, mc.cores = detectCores())) %>% discard(is.null)
+  }, mc.cores = detectCores()))
+  seeds <- seeds[sapply(seeds, is.not.null)]
   score.ll <- sapply(seeds, "[[", ("score")) # obtain the scores
   seeds <- seeds[order(score.ll, decreasing = T)] # sort the seeds in decreasing order of scores
 
@@ -290,8 +307,9 @@ get_matrix_list <- function(m, obj.list, assay = "RNA") {
   library(Seurat)
 
 
-  return(lapply(obj.list, function(obj) {
-    return(m[rownames(obj[[assay]]), colnames(obj[[assay]])])
+  return(lapply(obj.list, function(x) {
+    return(m[intersect(rownames(x[[assay]]), rownames(m)),
+             colnames(x[[assay]])])
   }))
 }
 
@@ -589,7 +607,7 @@ hybrid_biclust <- function(seeds = seeds, rna.list = rna.list, atac.list = atac.
 
   # Libraries
   library(igraph)
-  library(org.gs, character.only = T)
+  # library(org.gs, character.only = T)
   library(dplyr)
 
 

@@ -16,6 +16,10 @@ source(paste0(code.dir, "utils.R"))
 source(paste0(code.dir, "TFBS_list.R"))
 
 
+# Macros
+TOP_TFS <- Inf
+
+
 # Run STREAM
 #' @import Seurat EnsDb.Hsapiens.v86 EnsDb.Mmusculus.v75 BSgenome.Hsapiens.UCSC.hg19 BSgenome.Hsapiens.UCSC.hg38 BSgenome.Mmusculus.UCSC.mm10 BSgenome.Mmusculus.UCSC.mm9 org.Hs.eg.db org.Mm.eg.db Matrix IRISFGM
 #' @export
@@ -25,7 +29,9 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                        seed.ratio = 0.30, civero.covar = 0.00,
                        signac.score = 0.00, min.eGRNs = 100,
                        peak.assay = "ATAC", sim.mode = "both",
-                       cover.blocks = 10, KL = 6, expand.dist = Inf) {
+                       distance = 500000, signac.pval = 1.0,
+                       cover.blocks = 10, KL = 6,
+                       expand.dist = Inf) {
 
 
   # Check parameters
@@ -133,8 +139,15 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                                     assay = peak.assay))
   obj.list <- subset_object(block.list = block.list, object = obj, links.df = links.df,
                             atac.dis = atac.dis, max.peaks = top.peaks,
-                            min.cells = 0)
-  flags <- sapply(obj.list, is.not.full)
+                            min.cells = 0, peak.assay = peak.assay)
+  # flags <- sapply(obj.list, function(x) {
+  #   if (nrow(x[["RNA"]]) < 1 |
+  #       nrow(x[[peak.assay]]) < 1) {
+  #     return(F)
+  #   }
+  #   return(T)
+  # })
+  flags <- sapply(obj.list, is.not.null)
   obj.list <- obj.list[flags]
   block.list <- block.list[flags]
   if (length(block.list) < 1) {
@@ -149,7 +162,7 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                       org.gs = org.gs,
                       signac.score = signac.score, signac.pval = signac.pval,
                       min.cells = 0)
-  flags <- !unlist(sapply(G.list, is.null)) # whether the graph is empty
+  flags <- sapply(G.list, is.not.null) # whether the graph is empty
   G.list <- G.list[flags] # filter the graphs
   block.list <- block.list[flags] # filter the blocks
   obj.list <- obj.list[flags] # filter the seurat objects
@@ -178,7 +191,7 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
   if (length(seeds) < 1) {
     stop ("No seeds is identified!\n")
   }
-  mesage (length(seeds), " seeds are identified for hybrid biclustering.\n")
+  message (length(seeds), " seeds are identified for hybrid biclustering.\n")
   qs::qsave(seeds, paste0(out.dir, "Seeds.qsave"))
 
 
