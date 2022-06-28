@@ -25,6 +25,7 @@ TOP_TFS <- Inf
 #' @export
 run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                        min.cells = 10, out.dir = NULL, org = "hg38",
+                       p.QUBIC = "/fs/ess/PCON0022/liyang/tools/biclustering/QUBIC2-master/qubic",
                        top.ngenes = 15, c.cutoff = 1.0, n.blocks = 500,
                        seed.ratio = 0.30, cicero.covar = 0.00,
                        signac.score = 0.00, min.eGRNs = 100,
@@ -109,27 +110,38 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
   LTMG.obj <- call_LTMG(obj = obj)
   LTMG.matrix <- GetLTMGmatrix(LTMG.obj)
   LTMG.matrix <- LTMG.matrix - min(LTMG.matrix)
-  qs::qsave(LTMG.matrix, paste0(out.dir, "LTMG_matrix.qsave"))
-  qs::qsave(LTMG.obj, paste0(out.dir, "LTMG_obj.qsave"))
-  message ("Finished LTMG modeling for ", nrow(LTMG.obj@LTMG@LTMG_discrete),
-           " genes across ", ncol(LTMG.obj@LTMG@LTMG_discrete), " cells.\n")
+  LTMG.file <- paste0(out.dir, "LTMG_matrix.txt")
+  writeLTMG(LTMG.matrix = as.data.frame(binarize(as(LTMG.matrix, "sparseMatrix"))),
+            LTMG.file = LTMG.file)
+  # qs::qsave(LTMG.matrix, paste0(out.dir, "LTMG_matrix.qsave"))
+  # qs::qsave(LTMG.obj, paste0(out.dir, "LTMG_obj.qsave"))
+  message ("Finished LTMG modeling for ", nrow(LTMG.matrix),
+           " genes across ", ncol(LTMG.matrix), " cells.\n")
   # p.LTMG <- file.path(tempdir(), "LTMG_matrix.txt")
   # write_LTMG(as.data.frame(binarize(as(LTMG.matrix, "sparseMatrix"))), p.LTMG)
 
 
   # Biclustering on transcriptome data
   # setwd(out.dir)
-  LTMG.obj <- CalBinaryMultiSignal(LTMG.obj)
+  # LTMG.obj <- CalBinaryMultiSignal(LTMG.obj)
   # LTMG.obj@LTMG@LTMG_BinaryMultiSignal <- LTMG.obj@LTMG@LTMG_discrete -
   #   min(LTMG.obj@LTMG@LTMG_discrete)
-  block.original <- RunBicluster(
-    LTMG.obj,
-    DiscretizationModel = "LTMG", OpenDual = F,
-    NumBlockOutput = n.blocks, BlockOverlap = 0.25,
-    BlockCellMin = min.cells, Extension = c.cutoff)
+  QUBIC.info <- tryCatch(expr = run_QUBIC(path = p.QUBIC, file = LTMG.file,
+                                          f = 0.25, dual = dual.mode,
+                                          k = min.cells, o = n.blocks),
+                          error = function(e) {
+                            0 })
+  if (QUBIC.info == 0) {
+    stop ("Failed in running QUBIC 2.0 on the gene expression matrix.\n")
+  } # error message
+  # block.original <- RunBicluster(
+  #   LTMG.obj,
+  #   DiscretizationModel = "LTMG", OpenDual = F,
+  #   NumBlockOutput = n.blocks, BlockOverlap = 0.25,
+  #   BlockCellMin = min.cells, Extension = c.cutoff)
   rm(LTMG.obj)
-  qs::qsave(block.original, paste0(out.dir, "QUBIC_block_obj.qsave"))
-  block.list <- load_blocks(block.original = block.original,
+  # qs::qsave(block.original, paste0(out.dir, "QUBIC_block_obj.qsave"))
+  block.list <- load_blocks(block.file = paste0(LTMG.file, ".blocks"),
                             cover.blocks = cover.blocks, n.blocks = n.blocks,
                             sim.mode = sim.mode, rank.blocks = T)
   qs::qsave(block.list, paste0(out.dir, "QUBIC_blocks.qsave"))

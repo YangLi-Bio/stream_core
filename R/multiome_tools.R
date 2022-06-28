@@ -340,7 +340,8 @@ get_top_genes_peaks <- function(HBC, cand.genes, cand.peaks,
 
   GMULTI <- 1
   PMULTI <- 2 * GMULTI
-  cand.genes <- setdiff(cand.genes, HBC$genes) # the genes to choose from
+  cand.genes <- setdiff(cand.genes, HBC$genes) %>%
+    intersect(., rownames(rna.m)) # the genes to choose from
   if (length(cand.genes) < 1) {
     return(NULL)
   }
@@ -451,8 +452,10 @@ expand_fuzzy <- function(HBC, G, cand.genes, cand.peaks, rna.m, atac.m,
   library(igraph)
 
 
-  cand1.genes <- setdiff(cand.genes, HBC$genes) %>% intersect(., as_ids(V(G))) # remove the included genes
-  cand1.peaks <- setdiff(cand.peaks, HBC$peaks) %>% intersect(., as_ids(V(G))) # remove the included peaks
+  cand1.genes <- setdiff(cand.genes, HBC$genes) %>% intersect(., as_ids(V(G))) %>%
+    intersect(., rownames(m)) # remove the included genes
+  cand1.peaks <- setdiff(cand.peaks, HBC$peaks) %>% intersect(., as_ids(V(G))) %>%
+    intersect(., rownames(mm)) # remove the included peaks
   if (length(cand1.genes) < 1) {
     message(length(HBC$genes), "/", length(HBC$peaks), "/",
             length(HBC$cells), " genes/peaks/cells were included in this HBC.\n")

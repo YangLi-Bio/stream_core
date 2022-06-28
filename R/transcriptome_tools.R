@@ -39,31 +39,27 @@ write_LTMG <- function(LTMG.matrix, p.LTMG) {
 }
 
 
-# # Run QUBIC for biclustering
-# run_QUBIC <- function(path = "/fs/ess/PCON0022/liyang/tools/biclustering/QUBIC2-master",
-#                       file, c = 1.0, dual = F, k = 50, o = 100, f = 0.25,
-#                       d = T, square = T) {
-#
-#   command.ln <- paste0 (path, "/qubic -i ",
-#                         file, " -c ", c, " -k ", k, " -o ", o, " -f ", f)
-#   message ("--------> QUBIC2 command: ", command.ln, "\n")
-#
-#   if (d) { # performed on discretized matrix
-#     command.ln <- paste0 (command.ln, " -d")
-#   }
-#
-#   if (dual) { # perform dual expansion
-#     command.ln <- paste0 (command.ln, " -C")
-#   }
-#
-#   if (square) { # perform dual expansion
-#     command.ln <- paste0(command.ln, " -N")
-#   }
-#
-#   system (command.ln, wait = T)
-#
-#   return (1)
-# }
+# Run QUBIC for biclustering
+run_QUBIC <- function(path, file, c = 1.0, dual = F, k = 50, o = 100, f = 0.25,
+                      d = T, square = T) {
+
+  command.ln <- paste0 (path, " -i ",
+                        file, " -c ", c, " -k ", k, " -o ", o, " -f ", f)
+  message ("QUBIC2 command: ", command.ln, "\n")
+  if (d) { # performed on discretized matrix
+    command.ln <- paste0 (command.ln, " -d")
+  }
+  if (dual) { # perform dual expansion
+    command.ln <- paste0 (command.ln, " -C")
+  }
+  if (square) { # perform dual expansion
+    command.ln <- paste0(command.ln, " -N")
+  }
+  system (command.ln, wait = T)
+
+
+  return (1)
+}
 
 
 # Select the next bicluster
@@ -146,12 +142,12 @@ get_block_list <- function(block.genes, block.cells, ngene = 3,
 
 
   if (is.null(top.block)) {
-    top.block <- length(unique(block.genes$Condition))
+    top.block <- length(unique(block.genes$Label))
   }
-  gene.ll <- split(x = block.genes, f = block.genes$Condition) %>%
+  gene.ll <- split(x = block.genes, f = block.genes$Label) %>%
     lapply(., `[[`, ('Gene'))
-  cell.ll <- split(x = block.cells, f = block.cells$Condition) %>%
-    lapply(., `[[`, ('cell_name'))
+  cell.ll <- split(x = block.cells, f = block.cells$Label) %>%
+    lapply(., `[[`, ('Gene'))
   flag.ll <- sapply(gene.ll, length) %>% `>=` (ngene) # check the eligibility of each block
   list1 <- lapply(seq_along(gene.ll), function(i) {
     return(list(genes = gene.ll[[i]], cells = cell.ll[[i]]))
@@ -178,16 +174,47 @@ get_block_list <- function(block.genes, block.cells, ngene = 3,
 }
 
 
+# load QUBIC blocks
+get_block <-function(block.file, keyword = 'Genes', n = 200) {
+
+  tmp.block <- readLines(block.file) # file.path is used to
+  tmp.bc <- grep(keyword, tmp.block, value = T) # value: if FALSE, a vector containing
+  tmp.cel.module <- sapply(strsplit(tmp.bc,':'),'[', 2) # '[' and '2' in sapply means outputting
+  GENES <- as.character()   # store the genes
+  label_G <- as.numeric()   # store the occurrence of genes
+  for (j in 1:length(tmp.cel.module)) {
+    if (j > n) {
+      break
+    }
+    BCgene <- unlist(strsplit(tmp.cel.module[j], split = " ")) # transform a list into vector. Why?
+    BCgene <- BCgene[BCgene != ""]  # exclude the blank string (maybe the last one?)
+    GENES <- c(GENES, BCgene)
+    label_G <- c(label_G, rep(j, length(BCgene)))
+  }
+  df_C <- data.frame(gene_name = GENES, label = as.factor(label_G))
+  gene.list <- as.character(df_C$gene_name) # remove the double quotes?
+  df_C$gene_name <- gene.list
+  colnames(df_C) <- c("Gene", "Label")
+  message (length(unique(df_C$Label)), ' QUBIC 2.0 blocks were identified.\n')
+
+
+  return(df_C)
+}
+
+
 # Load QUBIC biclusters
-load_blocks <- function(block.original,
+load_blocks <- function(block.file = "./LTMG_matrix.txt",
             cover.blocks = 10, n.blocks = 200,
             sim.mode = "cell", rank.blocks = T) {
 
-  block.genes <- block.original@BiCluster@CoReg_gene
-  block.cells <- block.original@BiCluster@CoCond_cell
-  if (length(levels(block.genes$Condition)) !=
-      length(levels(block.cells$Condition))) {
-    stop ('The number of gene sets and cell sets in QUBIC 2.0 blocks are different: \n')
+  block.genes <- get_block(block.file, n = n.blocks) # get block genes from QUBIC2 output
+  block.cells <- get_block(block.file, keyword = 'Conds',
+                           n = n.blocks) # get block cells from QUBIC2 output
+  # block.genes <- block.original@BiCluster@CoReg_gene
+  # block.cells <- block.original@BiCluster@CoCond_cell
+  if (length(levels(block.genes$Label)) !=
+      length(levels(block.cells$Label))) {
+    stop ("The number of gene sets and cell sets in QUBIC 2.0 blocks are different: \n")
   }
   block.list <- get_block_list(block.genes = block.genes, block.cells = block.cells)
   if (length(block.list) < 1) {
@@ -200,4 +227,12 @@ load_blocks <- function(block.original,
   } else {
     return(block.list[1 : min(cover.blocks, length(block.list))])
   }
+}
+
+
+# Write the LTMG matrix into txt file
+writeLTMG <- function(LTMG.matrix = NULL, LTMG.file = "./") {
+  writeLines("o", con = LTMG.file, sep = "\t") # print the beginning symbol, i.e., "o"
+  write.table(LTMG.matrix, LTMG.file, append = T, quote = F, sep = "\t") # write the matrix
+  message ("Wrote the discretized gene expression to file ", LTMG.file, ".\n")
 }
