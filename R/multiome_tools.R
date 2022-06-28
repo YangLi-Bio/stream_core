@@ -741,7 +741,7 @@ merge_HBCs <- function(HBCs, stat = T, phyper.cutoff = 0.05,
 # Patch each HBC to add more genes and peaks
 #' @import Seurat pbmcapply dplyr Signac
 patch_HBCs <- function(merged.HBCs, binding.CREs, x, peak.ratio = NULL,
-                       peak.assay = "ATAC", distance = 500000) {
+                       peak.assay = "ATAC", distance = Inf) {
 
   # Libraries
   library(Seurat)

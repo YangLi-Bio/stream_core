@@ -26,7 +26,7 @@ TOP_TFS <- Inf
 run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
                        min.cells = 10, out.dir = NULL, org = "hg38",
                        top.ngenes = 15, c.cutoff = 1.0, n.blocks = 500,
-                       seed.ratio = 0.30, civero.covar = 0.00,
+                       seed.ratio = 0.30, cicero.covar = 0.00,
                        signac.score = 0.00, min.eGRNs = 100,
                        peak.assay = "ATAC", sim.mode = "both",
                        distance = 500000, signac.pval = 1.0,
@@ -47,18 +47,20 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
   # Libraries
   set.seed(1234)
   library(IRISFGM)
+  library(Seurat)
+  library(Signac)
   if (org == "mm10") {
-    org.gs <- BSgenome.Mmusculus.UCSC.mm10
     library(BSgenome.Mmusculus.UCSC.mm10)
+    org.gs <- BSgenome.Mmusculus.UCSC.mm10
   } else if (org == "mm9") {
-    org.gs <- BSgenome.Mmusculus.UCSC.mm9
     library(BSgenome.Mmusculus.UCSC.mm9)
+    org.gs <- BSgenome.Mmusculus.UCSC.mm9
   } else if (org == "hg19") {
-    org.gs <- BSgenome.Hsapiens.UCSC.hg19
     library(BSgenome.Hsapiens.UCSC.hg19)
+    org.gs <- BSgenome.Hsapiens.UCSC.hg19
   } else {
-    org.gs <- BSgenome.Hsapiens.UCSC.hg38
     library(BSgenome.Hsapiens.UCSC.hg38)
+    org.gs <- BSgenome.Hsapiens.UCSC.hg38
   }
   message ("Loading genome sequences of ", org, " ...\n")
 
@@ -95,6 +97,7 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
   # Annotate CREs with TF binding sites
   TF.CRE.pairs <- find_TFBS(GetAssayData(obj, assay = peak.assay, slot = "data"),
                             TFBS.list = TFBS.list, org = org)
+  qs::qsave(TF.CRE.pairs, paste0(out.dir, "TF_CRE_pairs.qsave"))
   bound.TFs <- TF.CRE.pairs$CRE
   binding.CREs <- TF.CRE.pairs$TF
   rm(TF.CRE.pairs)
@@ -126,12 +129,12 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
     BlockCellMin = min.cells, Extension = c.cutoff)
   rm(LTMG.obj)
   qs::qsave(block.original, paste0(out.dir, "QUBIC_block_obj.qsave"))
-  message ("Identified ", length(unique(block.list[, 2, drop = F])),
-           " QUBIC biclusters.\n")
   block.list <- load_blocks(block.original = block.original,
                             cover.blocks = cover.blocks, n.blocks = n.blocks,
                             sim.mode = sim.mode, rank.blocks = T)
   qs::qsave(block.list, paste0(out.dir, "QUBIC_blocks.qsave"))
+  message ("Identified ", length(block.list),
+           " QUBIC biclusters.\n")
 
 
   # Get the list of Seurat objects
@@ -189,7 +192,7 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
   # Seeding based upon Steiner forest problem (SFP) model
   seeds <- SFP_seeding(block.list = block.list, G.list = G.list, obj.list = obj.list,
                        bound.TFs = bound.TFs, binding.CREs = binding.CREs,
-                       TFGene.pairs = TFGene.pairs,
+                       TFGene.pairs = TFGene.pairs, score.cutoff = 1,
                        rna.dis = rna.dis, atac.dis = atac.dis, KL = KL)
   if (length(seeds) < 1) {
     stop ("No seeds is identified!\n")
@@ -233,7 +236,7 @@ run_stream <- function(obj, var.genes = 3000, top.peaks = 3000,
 
 
   # Optimize the HBCs before submodular optimization
-  pbj <- qs::qread(paste0(out.dir, "Obj_total.qsave"))
+  obj <- qs::qread(paste0(out.dir, "Obj_total.qsave"))
   patched.HBCs <- patch_HBCs(merged.HBCs = merged.HBCs, binding.CREs = binding.CREs,
                              x = obj, peak.assay = peak.assay,
                              distance = patch.dist)

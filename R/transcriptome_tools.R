@@ -190,7 +190,7 @@ load_blocks <- function(block.original,
     stop ('The number of gene sets and cell sets in QUBIC 2.0 blocks are different: \n')
   }
   block.list <- get_block_list(block.genes = block.genes, block.cells = block.cells)
-  if (length(block.ll) < 1) {
+  if (length(block.list) < 1) {
     stop ("There is no QUBIC bicluster identified!\n")
   }
 

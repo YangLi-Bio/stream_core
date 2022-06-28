@@ -75,7 +75,7 @@ CollapseToLongestTranscript <- function(ranges) {
 }
 
 
-#' @import Signac Seurat pbmcapply
+#' @import Signac Seurat pbmcapply dplyr
 #' @export
 filter_nearby_genes <- function(obj, distance = 500000, peak.assay = "ATAC") {
 
@@ -83,6 +83,7 @@ filter_nearby_genes <- function(obj, distance = 500000, peak.assay = "ATAC") {
   library(Signac)
   library(Seurat)
   library(pbmcapply)
+  library(dplyr)
 
 
   # calculate the nearby genes
