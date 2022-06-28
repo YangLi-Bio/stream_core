@@ -107,7 +107,7 @@ filter_nearby_genes <- function(obj, distance = 500000, peak.assay = "ATAC") {
 link_signac <- function(x, distance = 500000,
                         signac.score = 0,
                         signac.pval = 1,
-                        min.cells = 10, cell.weight = T,
+                        min.cells = 10,
                         peak.assay = 'ATAC') {
 
   # Libraries

@@ -61,7 +61,6 @@ build_graph <- function(obj.list,
                                 signac.score = signac.score,
                                 signac.pval = signac.pval,
                                 min.cells = min.cells,
-                                cell.weight = cell.weight,
                                 peak.assay = peak.assay)
     if (is.null(signac.links) | nrow(signac.links) < 1) {
       return(NULL)
@@ -84,8 +83,7 @@ build_graph <- function(obj.list,
     if (is.null(cicero.links) | "data.frame" %!in%
         class(cicero.links)) { # error exists
       cicero.links <- link_cor(x.atac, distance = distance,
-                               cicero.covar = cicero.covar,
-                               cell.weight = cell.weight)
+                               cicero.covar = cicero.covar)
     }
 
 
