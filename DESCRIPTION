@@ -1,0 +1,97 @@
+Package: stream
+Title: Enhancer-driven gene regulatory network inference from single-cell RNA-seq and ATAC-seq 
+Version: 1.0.0
+Date: 2022-12-17
+Authors@R: 
+  c(person(given = "Yang", 
+          family = "Li", 
+          email = "liyang.bioinformatics@gmail.com", 
+          role = c("aut", "cre"),
+          comment = c(ORCID = "0000-0002-7677-9028")),
+    person(given = "Anjun", 
+          family = "Ma", 
+          email = "Anjun.Ma@osumc.edu", 
+          role = "aut", 
+          comment = c(ORCID = "0000-0001-6269-398X")), 
+    person(given = "Yizhong", 
+           family = "Wang", 
+           email = "201911843@mail.sdu.edu.cn", 
+           role = "aut"), 
+    person(given = "Cankun", 
+           family = "Wang", 
+           email = "Cankun.Wang@osumc.edu", 
+           role = "aut", 
+           comment = c(ORCID = "0000-0002-0225-9855")), 
+    person(given = "Qin", 
+           family = "Ma", 
+           email = "Qin.Ma@osumc.edu", 
+           role = "ctb",
+           comment = c(ORCID = "0000-0002-3264-8392")))
+Description: We present a new algorithm, STREAM, for enhancer-driven gene regulatory network (eGRN) inference 
+    from transcriptome and chromatin accessibility profiled from the same single cell populations. The algorithm 
+    substantially improves the prediction accuracy of relations among transcription factors (TFs), enhancers, and 
+    genes, by achieving global optimization based on two key new ideas: (i) we developed the Steiner forest problem
+    (SFP) model based on a heterogeneous graph to identify the set of highly confident enhancer-gene relations which
+    underlie a context-specific functional gene module (FGM); and (ii) we designed a hybrid biclustering pipeline
+    integrated with submodular optimization for inferring eGRNs by identifying the optimal subset from a set of 
+    hybrid biclusters (HBCs), each of which represents co-regulated genes by the same TF and, co-accessible 
+    enhancers bound by the same TF, occurring over a subset of cells. These two key ideas are embedded in an iterative
+    framework for eGRN inference through by finding patterns in a pair of transcriptome and chromatin accessibility
+    matrices. Benchmarking analysis shows that the performance, assessed by f-scores, precision, or recall, was
+    significantly improved by our program compared to four other state-of-the-art tools on ten single-cell sequencing
+    datasets from seven sequencing techniques. The applicative powerbility of STREAM was demonstrated through two
+    biological case studies. By implementing STREAM on an Alzheimer’s disease dataset over a time coursediffuse small
+    lymphocytic lymphoma dataset, we showcased its capability to identify TF-enhancer-gene relations associated with
+    pseudotime and investigate the changing of enhancer-gene alongside cell lineagesexcavated the key TF-enhancer-gene
+    relations and cooperation among TFs underlying diseased cell types. Additionally, by implementing STREAM on a
+    diffuse small lymphocytic lymphoma dataset, we excavated the key TF-enhancer-gene relations and cooperation among
+    TFs underlying diseased cell types.STREAM showcased its capability to identify TF-enhancer-gene relations which
+    were associated with pseudotime and investigate the changing of enhancer-gene alongside cell lineages from an
+    Alzheimer’s disease dataset over a time course. 
+Reference: Li et al. (2022) <doi:10.1101/2022.12.15.520582>.
+Depends:
+    R (>= 4.0.0),
+    methods
+License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
+    license
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+LazyData: true
+RoxygenNote: 7.2.3
+URL: https://github.com/YangLi-Bio/stream_core
+biocViews:
+Imports:
+    AnnotationDbi,
+    BSgenome,
+    BSgenome.Hsapiens.UCSC.hg19,
+    BSgenome.Hsapiens.UCSC.hg38,
+    BSgenome.Mmusculus.UCSC.mm10,
+    BSgenome.Mmusculus.UCSC.mm9,
+    data.table,
+    dplyr,
+    ensembldb,
+    GenomeInfoDb,
+    GenomicAlignments,
+    GenomicRanges,
+    IRISFGM,
+    igraph, 
+    Matrix,
+    parallel,
+    pbapply,
+    pbmcapply,
+    qualV,
+    Ryacas,
+    SingleCellExperiment,
+    scales,
+    Seurat,
+    Signac,
+    stats,
+    utils
+Collate: 
+    'cistrome_tools.R'
+    'epigenome_tools.R'
+    'multiome_tools.R'
+    'reguome_tools.R'
+    'utilities.R'
+    'transcriptome_tools.R'
+    'stream.R'

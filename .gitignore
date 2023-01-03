@@ -1,0 +1,4 @@
+.Rproj.user
+*.qsave
+*.RData
+data/*
