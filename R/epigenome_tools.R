@@ -506,7 +506,7 @@ make_atac_cds <- function (input, binarize = FALSE) {
   sparse_intersect <- Matrix::sparseMatrix(i = intersect_lean_ord$site_name_num,
                                            j = intersect_lean_ord$cell_name_num,
                                            x = intersect_lean_ord$read_count)
-  atac_cds <- suppressWarnings(new_cell_data_set(methods::as(sparse_intersect,
+  atac_cds <- suppressWarnings(monocle3::new_cell_data_set(methods::as(sparse_intersect,
                                                              "sparseMatrix"),
                                                  cell_metadata = cellinfo,
                                                  gene_metadata = dhsinfo))
@@ -672,7 +672,7 @@ make_cicero_cds <- function (cds, reduced_coordinates, k = 50, summary_stats = N
   colnames(new_exprs) <- new_pdata$agg_cell
   fdf <- monocle3::fData(cds)
   new_pdata$temp <- NULL
-  cicero_cds <- suppressWarnings(new_cell_data_set(new_exprs,
+  cicero_cds <- suppressWarnings(monocle3::new_cell_data_set(new_exprs,
                                                    cell_metadata = new_pdata, gene_metadata = fdf))
   cicero_cds <- monocle3::detect_genes(cicero_cds, min_expr = 0.1)
   cicero_cds <- estimate_size_factors(cicero_cds)
@@ -684,7 +684,7 @@ make_cicero_cds <- function (cds, reduced_coordinates, k = 50, summary_stats = N
                                df_for_coords(row.names(monocle3::fData(cicero_cds))))
   }
   if (size_factor_normalize) {
-    cicero_cds <- suppressWarnings(new_cell_data_set(Matrix::t(Matrix::t(monocle3::exprs(cicero_cds)) /
+    cicero_cds <- suppressWarnings(monocle3::new_cell_data_set(Matrix::t(Matrix::t(monocle3::exprs(cicero_cds)) /
                                                                  monocle3::pData(cicero_cds)$Size_Factor),
                                                      cell_metadata = monocle3::pData(cicero_cds),
                                                      gene_metadata = monocle3::fData(cicero_cds)))
