@@ -279,16 +279,21 @@ calc_dist_matrix <- function (gene_range) {
 #'
 #' @keywords internal
 #'
-estimate_distance_parameter <- function(cds, window = 5e+05, maxit = 100, s = 0.75, sample_num = 100,
-                                         distance_constraint = 250000, distance_parameter_convergence = 1e-22,
-                                         max_elements = 200, genomic_coords = cicero::human.hg19.genome,
-                                         max_sample_windows = 500) {
+estimate_distance_parameter <- function(cds,
+                                        window=500000,
+                                        maxit=100,
+                                        s=0.75,
+                                        sample_num = 100,
+                                        distance_constraint = 250000,
+                                        distance_parameter_convergence = 1e-22,
+                                        max_elements = 200,
+                                        genomic_coords = cicero::human.hg19.genome,
+                                        max_sample_windows = 500) {
 
   assertthat::assert_that(is(cds, "cell_data_set"))
   assertthat::assert_that(assertthat::is.number(window))
   assertthat::assert_that(assertthat::is.count(maxit))
-  assertthat::assert_that(assertthat::is.number(s), s < 1,
-                          s > 0)
+  assertthat::assert_that(assertthat::is.number(s), s < 1, s > 0)
   assertthat::assert_that(assertthat::is.count(sample_num))
   assertthat::assert_that(assertthat::is.count(distance_constraint))
   assertthat::assert_that(distance_constraint < window)
@@ -297,45 +302,52 @@ estimate_distance_parameter <- function(cds, window = 5e+05, maxit = 100, s = 0.
     assertthat::is.readable(genomic_coords)
   }
   assertthat::assert_that(assertthat::is.count(max_sample_windows))
+
   grs <- generate_windows(window, genomic_coords)
+
   fData(cds)$chr <- gsub("chr", "", fData(cds)$chr)
-  fData(cds)$bp1 <- as.numeric(as.character(monocle3::fData(cds)$bp1))
-  fData(cds)$bp2 <- as.numeric(as.character(monocle3::fData(cds)$bp2))
+  fData(cds)$bp1 <- as.numeric(as.character(fData(cds)$bp1))
+  fData(cds)$bp2 <- as.numeric(as.character(fData(cds)$bp2))
+
   distance_parameters <- list()
   distance_parameters_calced <- 0
   it <- 0
-  while (sample_num > distance_parameters_calced &
-         it < max_sample_windows) {
+
+  while(sample_num > distance_parameters_calced & it < max_sample_windows) {
     it <- it + 1
     win <- sample(seq_len(length(grs)), 1)
     GL <- "Error"
     win_range <- get_genomic_range(grs, cds, win)
-    if (nrow(monocle3::exprs(win_range)) <= 1) {
-      (next)()
+
+    if (nrow(exprs(win_range))<=1) {
+      next()
     }
-    if (nrow(monocle3::exprs(win_range)) > max_elements) {
-      (next)()
+    if (nrow(exprs(win_range)) > max_elements) {
+      next()
     }
+
     dist_matrix <- calc_dist_matrix(win_range)
+
     distance_parameter <- find_distance_parameter(dist_matrix,
-                                                  win_range, maxit = maxit,
-                                                  null_rho = 0, s,
+                                                  win_range,
+                                                  maxit = maxit,
+                                                  null_rho = 0,
+                                                  s,
                                                   distance_constraint = distance_constraint,
-                                                  distance_parameter_convergence = distance_parameter_convergence)
-    if (!is(distance_parameter, "numeric")) {
-      next
-    }
+                                                  distance_parameter_convergence =
+                                                    distance_parameter_convergence)
+
+    if (!is(distance_parameter, "numeric")) next()
     distance_parameters = c(distance_parameters, distance_parameter)
-    distance_parameters_calced <- distance_parameters_calced +
-      1
+    distance_parameters_calced <- distance_parameters_calced + 1
   }
-  if (length(distance_parameters) < sample_num)
+
+  if(length(distance_parameters) < sample_num)
     warning(paste0("Could not calculate sample_num distance_parameters (",
                    length(distance_parameters), " were calculated) - see ",
                    "documentation details"))
-  if (length(distance_parameters) == 0)
+  if(length(distance_parameters) == 0)
     stop("No distance_parameters calculated")
-
 
   unlist(distance_parameters)
 }
@@ -524,13 +536,15 @@ make_atac_cds <- function (input, binarize = FALSE) {
 
 
 
-#' Run \code{cicero} to link coaccessibility enhancers
-#'
+#' Run Cicero
 #' @keywords internal
 #'
-run_cicero <- function (cds, genomic_coords, window = 5e+05, silent = FALSE,
-                        sample_num = 100) {
-
+run_cicero <- function(cds,
+                       genomic_coords,
+                       window = 500000,
+                       silent=FALSE,
+                       sample_num = 100) {
+  # Check input
   assertthat::assert_that(is(cds, "cell_data_set"))
   assertthat::assert_that(is.logical(silent))
   assertthat::assert_that(assertthat::is.number(window))
@@ -538,28 +552,28 @@ run_cicero <- function (cds, genomic_coords, window = 5e+05, silent = FALSE,
   if (!is.data.frame(genomic_coords)) {
     assertthat::is.readable(genomic_coords)
   }
-  if (!silent)
-    print("Starting Cicero")
-  if (!silent)
-    print("Calculating distance_parameter value")
-  distance_parameters <- estimate_distance_parameter(cds,
-                                                     window = window, maxit = 100,
-                                                     sample_num = sample_num,
+
+  if (!silent) print("Starting Cicero")
+  if (!silent) print("Calculating distance_parameter value")
+  distance_parameters <- estimate_distance_parameter(cds, window=window,
+                                                     maxit=100, sample_num = sample_num,
                                                      distance_constraint = 250000,
                                                      distance_parameter_convergence = 1e-22,
                                                      genomic_coords = genomic_coords)
+
   mean_distance_parameter <- mean(unlist(distance_parameters))
-  if (!silent)
-    print("Running models")
-  cicero_out <- generate_cicero_models(cds, distance_parameter = mean_distance_parameter,
-                                       window = window, genomic_coords = genomic_coords)
-  if (!silent)
-    print("Assembling connections")
-  all_cons <- assemble_connections(cicero_out, silent = silent)
-  if (!silent)
-    print("Done")
 
+  if (!silent) print("Running models")
+  cicero_out <-
+    generate_cicero_models(cds,
+                           distance_parameter = mean_distance_parameter,
+                           window = window,
+                           genomic_coords = genomic_coords)
 
+  if (!silent) print("Assembling connections")
+  all_cons <- assemble_connections(cicero_out, silent=silent)
+
+  if (!silent) print("Done")
   all_cons
 }
 

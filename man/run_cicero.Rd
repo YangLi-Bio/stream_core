@@ -2,7 +2,7 @@
 % Please edit documentation in R/epigenome_tools.R
 \name{run_cicero}
 \alias{run_cicero}
-\title{Run \code{cicero} to link coaccessibility enhancers}
+\title{Run Cicero}
 \usage{
 run_cicero(
   cds,
@@ -13,6 +13,6 @@ run_cicero(
 )
 }
 \description{
-Run \code{cicero} to link coaccessibility enhancers
+Run Cicero
 }
 \keyword{internal}

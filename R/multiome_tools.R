@@ -80,7 +80,7 @@ build_graph <- function(obj.list, obj = NULL, rna.dis, atac.dis,
                             org.gs@seqinfo@seqlengths) # genome sequence lengths
   colnames(genome.info) <- c("seqnames", "seqlengths") # rename the columns
   cicero.links <- run_cicero(cds = cicero.cds, genomic_coords = genome.info,
-                             window = distance * 2) # build peak-peak linkages using cicero
+                             window = distance * 2 ) # build peak-peak linkages using cicero
   colnames(cicero.links) <- c('node1', 'node2', 'weight')
   cicero.links$node2 <- as.character(cicero.links$node2) # convert factors into characters
   coaccess.links <- data.table::rbindlist(apply(cicero.links, 1, function(r) {
