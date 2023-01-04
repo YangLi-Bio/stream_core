@@ -43,7 +43,6 @@ subset_object <- function(LTMG.obj, object, peak.assay = 'ATAC',
 #'
 #' @importFrom dplyr %>%
 #' @importFrom monocle3 estimate_size_factors preprocess_cds reduce_dimension detect_genes
-#' @importFrom SingleCellExperiment reducedDims
 #'
 build_graph <- function(obj.list, obj = NULL, rna.dis, atac.dis,
                         distance = 250000, cicero.covar = -Inf,
