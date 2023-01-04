@@ -543,7 +543,7 @@ run_cicero <- function(cds,
                        genomic_coords,
                        window = 500000,
                        silent=FALSE,
-                       sample_num = 100) {
+                       sample_num = 100 ) {
   # Check input
   assertthat::assert_that(is(cds, "cell_data_set"))
   assertthat::assert_that(is.logical(silent))
