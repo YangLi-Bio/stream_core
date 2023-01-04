@@ -63,6 +63,8 @@ build_graph <- function(obj.list, obj = NULL, rna.dis, atac.dis,
 
 
   # Link enhancers to enhancers
+  require(monocle3)
+  require(cicero)
   x <- Seurat::GetAssayData(object = obj, slot = "data", assay = peak.assay)
   summ <- Matrix::summary(x)
   # convert the matrix into a sparse matrix
