@@ -67,7 +67,6 @@ Imports:
     BSgenome.Hsapiens.UCSC.hg38,
     BSgenome.Mmusculus.UCSC.mm10,
     BSgenome.Mmusculus.UCSC.mm9,
-    cicero,
     data.table,
     dplyr,
     ensembldb,

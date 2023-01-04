@@ -71,6 +71,7 @@ build_graph <- function(obj.list, obj = NULL, rna.dis, atac.dis,
                             Destination = colnames(x)[summ$j],
                             Weight      = summ$x) # transform the sparse matrix into a data frame
   input.cds <- make_atac_cds(cicero.data, binarize = T) %>% detect_genes
+  # input.cds <- monocle3::detect_genes(input.cds)
   input.cds <- input.cds[Matrix::rowSums(monocle3::exprs(input.cds)) != 0, ] %>% estimate_size_factors %>%
     preprocess_cds(method = "LSI", verbose = FALSE) %>%
     reduce_dimension(reduction_method = 'UMAP', preprocess_method = "LSI")
